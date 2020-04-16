@@ -7,7 +7,7 @@
             "request": "launch",
             "env": {},
             "cwd": "${workspaceFolder}",
-            "program": "${workspaceFolder}/../pretty-exports.py",
+            "program": "${workspaceFolder}/pretty-exports.py",
             "args": [],
             "console": "integratedTerminal"
         }
