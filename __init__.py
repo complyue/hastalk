@@ -8,7 +8,7 @@ from .log import *
 __all__ = [
 
     # exports from .edh
-    'Maybe', 'Nothing', 'Just', 'BrdCstChan', 'EventSink',
+    'Maybe', 'Nothing', 'Just', 'Chan', 'EventSink',
 
     # exports from .log
     'root_logger', 'get_logger',

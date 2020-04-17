@@ -11,6 +11,6 @@ __all__ = [
     'Maybe', 'Nothing', 'Just',
 
     # exports from .evt
-    'BrdCstChan', 'EventSink',
+    'Chan', 'EventSink',
 
 ]
