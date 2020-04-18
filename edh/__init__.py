@@ -11,6 +11,6 @@ __all__ = [
     'Maybe', 'Nothing', 'Just',
 
     # exports from .evt
-    'Chan', 'EventSink',
+    'EndOfStream', 'PubChan', 'SubChan', 'EventSink',
 
 ]
