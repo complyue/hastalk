@@ -1,6 +1,18 @@
 """
 Event processing constructs at par to Edh's
 
+PubChan/SubChan here are some similar to STM's TChan, see:
+    http://hackage.haskell.org/package/stm/docs/Control-Concurrent-STM-TChan.html
+
+But unlike TChan of STM, PubChan here is not buffering items, when a PubChan has
+no SubChan reading its item stream, the item written to the PubChan is discarded
+immediately.
+
+Multiple SubChan can consume items from a single PubChan concurrently, and a
+SubChan's buffer is unbounded, so a slow consumer to a fast producer will increase
+the program's memory footprint, which will be ever increasing until the consumers
+catch up with the producer.
+
 """
 
 import asyncio
@@ -10,66 +22,74 @@ from typing import *
 from .adt import *
 
 
-__all__ = ["Chan", "EventSink"]
+__all__ = ["EndOfStream", "PubChan", "SubChan", "EventSink"]
 
 
-class Chan:
+class _EndOfStream:
+    __slots__ = ()
+
+    @staticmethod
+    def __repr__():
+        return "EndOfStream"
+
+
+EndOfStream = _EndOfStream()
+
+
+class PubChan:
     """
-    Chan here is some similar to STM's TChan, see:
-        http://hackage.haskell.org/package/stm/docs/Control-Concurrent-STM-TChan.html
-
-    But unlike TChan of STM, a chan object here does NOT buffer items, when a Chan has
-    no reader, any item is immediately discarded when written to it.
-
-    And a Chan here can do both broadcasting as well as unicasting, even at the same
-    time, wrt how it is consumed:
-
-      *) Broadcast readers read a Chan with async for:
-            async for ev in chan:
-                ...
-         Multiple such concurrent readers are fed with the same stream of items
-
-      *) Unicast readers read a Chan by repeatedly call:
-            chan.read()
-         A stream of items are stochastically distributed to multiple such readers if
-         they run concurrently, in a respect load-balanced.
-
-      *) Mixing broadcast / unicast readers is techinically possible, but the semantic
-         is hard to reason, and seems barely purposeful.
+    Publisher's channel, write only
 
     """
 
     __slots__ = "nxt"
 
-    def __init__(self, dupOf: Optional["Chan"] = None):
-        if dupOf is None:
-            loop = asyncio.get_running_loop()
-            self.nxt = loop.create_future()
-        elif isinstance(dupOf, Chan):
-            self.nxt = dupOf.nxt
-        else:
-            raise TypeError(f"Can not duplicate to a Chan from type {type(dupOf)!r}")
+    def __init__(self):
+        loop = asyncio.get_running_loop()
+        self.nxt = loop.create_future()
 
-    async def write(self, ev):
+    def write(self, ev):
         loop = asyncio.get_running_loop()
         nxt = loop.create_future()
-        if self.nxt.done():
-            # TODO triage what this situation is, should be dealt at all, then how ?
-            # may just be some Chans written separately after duplicated one or more
-            # from a common source, I don't see big problems so far.
-            pass
-        else:
-            self.nxt.set_result((ev, nxt))
+        self.nxt.set_result((ev, nxt))
         self.nxt = nxt
+
+    async def stream(self):
+        """
+        This is the async iterator to consume subsequent items from this
+        channel.
+        """
+        nxt = self.nxt
+        while True:
+            (itm, nxt) = await nxt
+            if itm is EndOfStream:
+                break
+            yield itm
+
+
+class SubChan:
+    """
+    Subscriber's channel, read only.
+    
+    """
+
+    __slots__ = "nxt"
+
+    def __init__(self, pubChan: "PubChan"):
+        """
+        Create a subscriber's channel from a publisher's channel
+
+        All subsequent items written to the PubChan will be buffered for this
+        SubChan until consumed with `subChan.read()`
+
+        CAVEAT: Consuming this SubChan slower than producing to the PubChan
+                will increase memory footprint.
+        """
+        self.nxt = pubChan.nxt
 
     async def read(self):
         (itm, self.nxt) = await self.nxt
         return itm
-
-    async def __aiter__(self):
-        while True:
-            (itm, self.nxt) = await self.nxt
-            yield itm
 
 
 class EventSink:
@@ -78,27 +98,53 @@ class EventSink:
 
     """
 
-    __slots__ = ("seqn", "mrv", "chan", "subc")
+    __slots__ = ("seqn", "mrv", "chan", "subw")
 
     def __init__(self):
+        # sequence number
         self.seqn = 0
+        # most recent event value
         self.mrv = None
-        self.chan = Chan()
-        self.subc = 0
-
-    def subscribe(self) -> Tuple[Chan, Maybe[Any]]:
-        """
-        Returns a duplicated channel to read events, as well as the
-        most recent event value.
-
-        """
-        self.subc += 1  # todo simulate int64 wrap back?
-        if self.seqn > 0:
-            return Chan(self.chan), Just(self.mrv)
-        else:
-            return Chan(self.chan), Nothing()
+        # the publish channel
+        self.chan = PubChan()
+        # subscriber waiters, must be coroutines
+        self.subw = []
 
     async def publish(self, ev):
-        self.seqn += 1  # todo simulate int64 wrap back?
+        if self.seqn >= 9223372036854775807:
+            # int64 wrap back to 1 on overflow
+            self.seqn = 1
+        else:
+            self.seqn += 1
         self.mrv = ev
-        await self.chan.write(ev)
+        self.chan.write(ev)
+
+    async def stream(self):
+        """
+        This is the async iterator an event consumer should use to consume
+        subsequent events from this sink.
+
+        """
+        nxt = self.chan.nxt
+        if self.seqn > 0:
+            yield self.mrv
+        subw = self.subw
+        if len(subw) > 0:
+            self.subw = []
+            for producer in subw:
+                asyncio.create_task(producer)
+        while True:
+            (itm, nxt) = await nxt
+            if itm is EndOfStream:
+                break
+            yield itm
+
+    def runProducer(self, producer: Coroutine):
+        """
+        This is the producer scheduler that should be used to schedule a
+        coroutine to run, which is going to publish events into this sink,
+        but only after some consumer has started consuming events from
+        this sink, i.e. to ensure no event from the producer coroutine can
+        be missed by the consumer.
+        """
+        self.subw.append(producer)
