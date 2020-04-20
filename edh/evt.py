@@ -1,17 +1,27 @@
 """
 Event processing constructs at par to Edh's
 
-PubChan/SubChan here are some similar to STM's TChan, see:
-    http://hackage.haskell.org/package/stm/docs/Control-Concurrent-STM-TChan.html
+The channel construct here is similar to STM's broadcast TChan, see:
+  http://hackage.haskell.org/package/stm/docs/Control-Concurrent-STM-TChan.html
+While no unicast TChan needed here, the design is simplified to PubChan and
+SubChan.
 
-But unlike TChan of STM, PubChan here is not buffering items, when a PubChan has
-no SubChan reading its item stream, the item written to the PubChan is discarded
-immediately.
+For intuition:
+    *) PubChan can be thought of as the write-only broadcast TChan.
+    *) SubChan can be thought of as the TChan dup'ed from a broadcast TChan,
+       which will only ever be read.
 
-Multiple SubChan can consume items from a single PubChan concurrently, and a
-SubChan's buffer is unbounded, so a slow consumer to a fast producer will increase
-the program's memory footprint, which will be ever increasing until the consumers
-catch up with the producer.
+Like a broadcast TChan, a PubChan itself is not buffering items, when there is
+no SubChan reading its item stream, any item written to the PubChan is
+discarded immediately.
+
+Like you can dup multiple TChan from a broadcast TChan, you can create multiple
+SubChan from a common PubChan, then have them consuming items from the common
+PubChan concurrently.
+
+A SubChan's buffer is unbounded, so here's a caveat that slow consumers with a
+faster producer will constantly increase the program's memory footprint, i.e.
+items will pile up in memory.
 
 """
 
