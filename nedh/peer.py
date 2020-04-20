@@ -52,10 +52,10 @@ class Peer:
         self.channels[chLctr] = chSink or EventSink()
 
     async def postCommand(self, src: str, dir_: str = ""):
-        await self.posting(Packet(dir_, src.encode("utf-8")))
+        await self.posting(textPacket(dir_, src))
 
     async def p2c(self, dir_: str, src: str):
-        await self.posting(Packet(dir_, src.encode("utf-8")))
+        await self.posting(textPacket(dir_, src))
 
     async def readCommand(self, cmdEnv=None):
         """
