@@ -79,14 +79,21 @@ class Peer:
                 if not eol.done():
                     eol.set_exception(exc)
                 raise exc
-            if pkt.dir.startswith("blob:"):
-                raise RuntimeError("Blob packet not supported yet.")
-                return
-            # interpret as textual command
-            src = pkt.payload.decode("utf-8")
             if cmdEnv is None:
                 # TODO way to obtain caller's global scope and default to that ?
-                cmdEnv = globals()
+                pass
+            if pkt.dir.startswith("blob:"):
+                blob_dir = pkt.dir[5:]
+                if len(blob_dir) < 1:
+                    return pkt.payload
+                chLctr = run_py(blob_dir, cmdEnv, self.ident)
+                chSink = self.channels.get(chLctr, None)
+                if chSink is None:
+                    raise RuntimeError(f"Missing command channel: {chLctr!r}")
+                chSink.publish(pkt.payload)
+                return None
+            # interpret as textual command
+            src = pkt.payload.decode("utf-8")
             try:
                 cmdVal = run_py(src, cmdEnv, self.ident)
                 if len(pkt.dir) < 1:
