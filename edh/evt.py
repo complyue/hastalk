@@ -32,23 +32,15 @@ from typing import *
 from .adt import *
 
 
-__all__ = ["EndOfStream", "PubChan", "SubChan", "EventSink"]
-
-
-class _EndOfStream:
-    __slots__ = ()
-
-    @staticmethod
-    def __repr__():
-        return "EndOfStream"
-
-
-EndOfStream = _EndOfStream()
+__all__ = ["PubChan", "SubChan", "EventSink"]
 
 
 class PubChan:
     """
     Publisher's channel, write only
+
+    The `stream()` method coroutine can be called with async-for from
+    a consumer task to consume subsquent items published to this channel.
 
     """
 

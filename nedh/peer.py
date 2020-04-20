@@ -9,28 +9,19 @@ from typing import *
 
 from ..edh import *
 
+from .mproto import *
 
-__all__ = ["CommCmd", "Peer"]
 
-
-class CommCmd:
-    __slots__ = ("dir", "src")
-
-    def __init__(dir_: str, self, src: str):
-        self.dir = dir_
-        self.src = src
-
-    def __repr__(self):
-        return f"CommCmd({self.dir!r},{self.src!r})"
+__all__ = ["Peer"]
 
 
 class Peer:
     def __init__(
         self,
         ident,
-        posting: Callable[[CommCmd], Awaitable[None]],
-        hosting: Callable[[], Awaitable[CommCmd]],
-        channels: Dict[Any, EventSink] = {},
+        posting: Callable[[Packet], Awaitable],
+        hosting: Callable[[], Awaitable[Packet]],
+        channels: Dict[Any, EventSink] = None,
     ):
         loop = asyncio.get_running_loop()
         # identity of peer
@@ -42,16 +33,29 @@ class Peer:
         # cmd intake
         self.hosting = hosting
         # cmd mux
-        self.channels = channels
+        self.channels = channels or {}
 
     def __repr__(self):
         return f"Peer<{self.ident}>"
 
+    async def join(self):
+        await self.eol
+
+    async def stop(self):
+        if not self.eol.done():
+            self.eol.set_result(None)
+
+    def armedChannel(self, chLctr: object):
+        return self.channels.get(chLctr, None)
+
+    def armChannel(self, chLctr: object, chSink: Optional[EventSink]):
+        self.channels[chLctr] = chSink or EventSink()
+
     async def postCommand(self, src: str, dir_: str = ""):
-        await self.posting(CommCmd(src, dir_))
+        await self.posting(Packet(dir_, src.encode("utf-8")))
 
     async def p2c(self, dir_: str, src: str):
-        await self.posting(CommCmd(src, dir_))
+        await self.posting(Packet(dir_, src.encode("utf-8")))
 
     async def readCommand(self, cmdEnv=None):
         """
@@ -60,34 +64,40 @@ class Peer:
         Note a command may target a specific channel, thus get posted to that
              channel's sink, and None will be returned from here for it.
         """
-        f = await asyncio.as_completed((self.eol, self.hosting()))
-        if self.eol.done():
-            await self.eol  # reraise exception if that caused eol
-            return EndOfStream
-        cmd = await f
-        assert isinstance(cmd, CommCmd), f"Unexpected cmd of type: {type(cmd)!r}"
-        if "err" == cmd.dir:
-            exc = RuntimeError(cmd.src)
-            if not self.eol.done():
-                self.eol.set_exception(exc)
-            raise exc
-        if cmdEnv is None:
-            # TODO way to obtain caller's global scope and default to that ?
-            cmdEnv = globals()
-        try:
-            cmdVal = run_py(cmd.src, cmdEnv, self.ident)
-            if len(cmd.dir) < 1:
-                return cmdVal
-            chLctr = run_py(cmd.dir, cmdEnv, self.ident)
-            chSink = self.channels.get(chLctr, None)
-            if chSink is None:
-                raise RuntimeError(f"Missing command channel: {chLctr!r}")
-            chSink.publish(cmdVal)
-            return None
-        except Exception as exc:
-            if not self.eol.done():
-                self.eol.set_exception(exc)
-            raise  # reraise as is
+        eol = self.eol
+        for f in asyncio.as_completed({eol, self.hosting()}):
+            if f is eol:
+                await eol  # reraise exception if that caused eol
+                return EndOfStream
+            pkt = await f
+            assert isinstance(pkt, Packet), f"Unexpected packet of type: {type(pkt)!r}"
+            if "err" == pkt.dir:
+                exc = RuntimeError(pkt.payload.decode("utf-8"))
+                if not eol.done():
+                    eol.set_exception(exc)
+                raise exc
+            if pkt.dir.startswith("blob:"):
+                raise RuntimeError("Blob packet not supported yet.")
+                return
+            # interpret as textual command
+            src = pkt.payload.decode("utf-8")
+            if cmdEnv is None:
+                # TODO way to obtain caller's global scope and default to that ?
+                cmdEnv = globals()
+            try:
+                cmdVal = run_py(src, cmdEnv, self.ident)
+                if len(pkt.dir) < 1:
+                    return cmdVal
+                chLctr = run_py(pkt.dir, cmdEnv, self.ident)
+                chSink = self.channels.get(chLctr, None)
+                if chSink is None:
+                    raise RuntimeError(f"Missing command channel: {chLctr!r}")
+                chSink.publish(cmdVal)
+                return None
+            except Exception as exc:
+                if not eol.done():
+                    eol.set_exception(exc)
+                raise  # reraise as is
 
 
 def run_py(code: str, globals_: dict = None, src_name="<py-code>") -> object:

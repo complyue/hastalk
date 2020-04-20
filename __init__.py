@@ -9,12 +9,12 @@ from .nedh import *
 __all__ = [
 
     # exports from .edh
-    'Maybe', 'Nothing', 'Just', 'EndOfStream', 'PubChan', 'SubChan', 'EventSink',
+    'Maybe', 'Nothing', 'Just', 'EndOfStream', 'EdhPeerError', 'PubChan', 'SubChan', 'EventSink',
 
     # exports from .log
     'root_logger', 'get_logger',
 
     # exports from .nedh
-    'EdhClient', 'CommCmd', 'Peer',
+    'EdhClient', 'Packet', 'textPacket', 'sendPacket', 'receivePacketStream', 'Peer',
 
 ]
