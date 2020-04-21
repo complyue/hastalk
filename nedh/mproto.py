@@ -67,7 +67,7 @@ async def receivePacketStream(
     async def parse_pkts():
         readahead = b""
 
-        def parse_hdr():
+        async def parse_hdr():
             nonlocal readahead
             while True:
                 if len(readahead) < 1:
@@ -88,7 +88,7 @@ async def receivePacketStream(
                 return payload_len, dir_
 
         while True:
-            payload_len, dir_ = parse_hdr()
+            payload_len, dir_ = await parse_hdr()
             if payload_len < 0:  # normal eos, try mark and done
                 if not eos.done():
                     eos.set_result(EndOfStream)
