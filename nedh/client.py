@@ -57,10 +57,20 @@ class EdhClient:
 
         asyncio.create_task(self._consumer_thread()).add_done_callback(client_cleanup)
 
+    def __repr__(self):
+        return f"EdhClient({self.consumer_modu!r}, {self.service_addr!r}, {self.service_port!r})"
+
     def __await__(self):
         yield from self.service_addrs
         logger.info(f"Connected to service at {self.service_addrs.result()!s}")
         return self
+
+    async def join(self):
+        await self.eol
+
+    async def stop(self):
+        if not self.eol.done():
+            self.eol.set_result(None)
 
     async def _consumer_thread(self):
         outlet = None
