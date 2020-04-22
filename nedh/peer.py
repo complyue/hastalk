@@ -41,7 +41,7 @@ class Peer:
     async def join(self):
         await self.eol
 
-    async def stop(self):
+    def stop(self):
         if not self.eol.done():
             self.eol.set_result(None)
 
@@ -68,46 +68,44 @@ class Peer:
              channel's sink, and None will be returned from here for it.
         """
         eol = self.eol
-        for f in asyncio.as_completed({eol, self.hosting()}):
-            if f is eol:
-                await eol  # reraise exception if that caused eol
-                return EndOfStream
-            pkt = await f
-            assert isinstance(pkt, Packet), f"Unexpected packet of type: {type(pkt)!r}"
-            if "err" == pkt.dir:
-                exc = RuntimeError(pkt.payload.decode("utf-8"))
-                if not eol.done():
-                    eol.set_exception(exc)
-                raise exc
-            if cmdEnv is None:
-                # TODO way to obtain caller's global scope and default to that ?
-                pass
-            if pkt.dir.startswith("blob:"):
-                blob_dir = pkt.dir[5:]
-                if len(blob_dir) < 1:
-                    return pkt.payload
-                chLctr = run_py(blob_dir, cmdEnv, self.ident)
-                chSink = self.channels.get(chLctr, None)
-                if chSink is None:
-                    raise RuntimeError(f"Missing command channel: {chLctr!r}")
-                chSink.publish(pkt.payload)
-                return None
-            # interpret as textual command
-            src = pkt.payload.decode("utf-8")
-            try:
-                cmdVal = run_py(src, cmdEnv, self.ident)
-                if len(pkt.dir) < 1:
-                    return cmdVal
-                chLctr = run_py(pkt.dir, cmdEnv, self.ident)
-                chSink = self.channels.get(chLctr, None)
-                if chSink is None:
-                    raise RuntimeError(f"Missing command channel: {chLctr!r}")
-                chSink.publish(cmdVal)
-                return None
-            except Exception as exc:
-                if not eol.done():
-                    eol.set_exception(exc)
-                raise  # reraise as is
+        pkt = await read_stream(eol, self.hosting())
+        if pkt is EndOfStream:
+            return EndOfStream
+        assert isinstance(pkt, Packet), f"Unexpected packet of type: {type(pkt)!r}"
+        if "err" == pkt.dir:
+            exc = RuntimeError(pkt.payload.decode("utf-8"))
+            if not eol.done():
+                eol.set_exception(exc)
+            raise exc
+        if cmdEnv is None:
+            # TODO way to obtain caller's global scope and default to that ?
+            pass
+        if pkt.dir.startswith("blob:"):
+            blob_dir = pkt.dir[5:]
+            if len(blob_dir) < 1:
+                return pkt.payload
+            chLctr = run_py(blob_dir, cmdEnv, self.ident)
+            chSink = self.channels.get(chLctr, None)
+            if chSink is None:
+                raise RuntimeError(f"Missing command channel: {chLctr!r}")
+            chSink.publish(pkt.payload)
+            return None
+        # interpret as textual command
+        src = pkt.payload.decode("utf-8")
+        try:
+            cmdVal = run_py(src, cmdEnv, self.ident)
+            if len(pkt.dir) < 1:
+                return cmdVal
+            chLctr = run_py(pkt.dir, cmdEnv, self.ident)
+            chSink = self.channels.get(chLctr, None)
+            if chSink is None:
+                raise RuntimeError(f"Missing command channel: {chLctr!r}")
+            chSink.publish(cmdVal)
+            return None
+        except Exception as exc:
+            if not eol.done():
+                eol.set_exception(exc)
+            raise  # reraise as is
 
 
 def run_py(code: str, globals_: dict = None, src_name="<py-code>") -> object:

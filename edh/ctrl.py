@@ -1,7 +1,9 @@
+import asyncio
+from typing import *
 
-__all__ = [
- "EndOfStream", 'EdhPeerError'
-]
+from .adt import *
+
+__all__ = ["EndOfStream", "EdhPeerError", "read_stream"]
 
 
 class _EndOfStream:
@@ -10,6 +12,7 @@ class _EndOfStream:
     @staticmethod
     def __repr__():
         return "EndOfStream"
+
 
 # Edh uses nil to mark end-of-stream, it's improper in Python to use
 # None for that purpose, so here we use an explicit singleton object
@@ -29,3 +32,14 @@ class EdhPeerError(RuntimeError):
     def __str__(self):
         return f"🏗️ {self.peer_site!s}\n{self.details!s}"
 
+
+async def read_stream(eos: asyncio.Future, rdr: Coroutine) -> Union[_EndOfStream, Any]:
+    done, _pending = await asyncio.wait(
+        {eos, asyncio.create_task(rdr)}, return_when=asyncio.FIRST_COMPLETED
+    )
+    done.remove(eos)
+    if not done:
+        await eos  # reraise exception if that caused eos
+        return EndOfStream
+    for fut in done:
+        return await fut

@@ -9,7 +9,7 @@ from .nedh import *
 __all__ = [
 
     # exports from .edh
-    'Maybe', 'Nothing', 'Just', 'EndOfStream', 'EdhPeerError', 'PubChan', 'SubChan', 'EventSink',
+    'Maybe', 'Nothing', 'Just', 'EndOfStream', 'EdhPeerError', 'read_stream', 'PubChan', 'SubChan', 'EventSink',
 
     # exports from .log
     'root_logger', 'get_logger',

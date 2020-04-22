@@ -12,7 +12,7 @@ __all__ = [
     'Maybe', 'Nothing', 'Just',
 
     # exports from .ctrl
-    'EndOfStream', 'EdhPeerError',
+    'EndOfStream', 'EdhPeerError', 'read_stream',
 
     # exports from .evt
     'PubChan', 'SubChan', 'EventSink',

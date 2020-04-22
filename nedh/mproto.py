@@ -110,14 +110,17 @@ async def receivePacketStream(
     # of the intaking stream, here we iterate over the async generator
     # programmatically, along with frequent eos checks
     pkt_in = parse_pkts()
-    try:
-        while not eos.done():
-            for f in asyncio.as_completed({eos, pkt_in.__anext__()}):
-                if f is eos:
-                    await eos  # reraise exception if that caused eos
-                    return
-                pkt = await f
-                await pkt_sink(pkt)
-                break
-    except StopAsyncIteration:
-        pass
+
+    # StopAsyncIteration will never be retrieved after eos, if directly
+    # scheduled by read_stream() as a separate task, handle it explicitly
+    async def next_pkt():
+        try:
+            return await pkt_in.__anext__()
+        except StopAsyncIteration:
+            return EndOfStream
+
+    while True:
+        pkt = await read_stream(eos, next_pkt())
+        if pkt is EndOfStream:
+            return
+        await pkt_sink(pkt)

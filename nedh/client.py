@@ -68,7 +68,7 @@ class EdhClient:
     async def join(self):
         await self.eol
 
-    async def stop(self):
+    def stop(self):
         if not self.eol.done():
             self.eol.set_result(None)
 
@@ -134,12 +134,10 @@ class EdhClient:
             # pump commands out,
             # this task is the only one writing the socket
             while True:
-                for f in asyncio.as_completed({eol, poq.get()}):
-                    if f is eol:
-                        return
-                    pkt = await f
-                    await sendPacket(ident, outlet, pkt)
-                    break
+                pkt = await read_stream(eol, poq.get())
+                if pkt is EndOfStream:
+                    return
+                await sendPacket(ident, outlet, pkt)
 
         finally:
             if not self.service_addrs.done():
