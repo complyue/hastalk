@@ -10,11 +10,14 @@ import asyncio
 from typing import *
 
 from ..edh import *
+from ..log import *
 
 from .mproto import *
 from .peer import *
 
 __all__ = ["EdhClient"]
+
+logger = get_logger(__name__)
 
 
 class EdhClient:
@@ -54,6 +57,11 @@ class EdhClient:
 
         asyncio.create_task(self._consumer_thread()).add_done_callback(client_cleanup)
 
+    def __await__(self):
+        yield from self.service_addrs
+        logger.info(f"Connected to service at {self.service_addrs.result()!s}")
+        return self
+
     async def _consumer_thread(self):
         outlet = None
         eol = self.eol
@@ -78,11 +86,16 @@ class EdhClient:
             #       ...
             # defined in it
             modu = runpy.run_module(self.consumer_modu)
-            __edh_consumer__ = modu["__edh_consumer__"]
+            __edh_consumer__ = modu.get("__edh_consumer__", None)
+            if not asyncio.iscoroutinefunction(__edh_consumer__):
+                raise RuntimeError(
+                    f"Missing async __edh_consumer__() from peer module: {self.consumer_modu!s}"
+                )
             modu["peer"] = peer
             if self.init:
                 # call per-connection peer module initialization method
                 await self.init(modu)
+            logger.debug(f"Nedh peer module {self.consumer_modu} initialized")
 
             # mark client end-of-life with the result anyway
             def cnsmr_cleanup(cnsmr_fut):
@@ -98,7 +111,7 @@ class EdhClient:
                     eol.set_result(None)
 
             # run the consumer module as another task (thread)
-            asyncio.create_task(__edh_consumer__).add_done_callback(cnsmr_cleanup)
+            asyncio.create_task(__edh_consumer__()).add_done_callback(cnsmr_cleanup)
 
             # pump commands in,
             # this task is the only one reading the socket
@@ -115,7 +128,7 @@ class EdhClient:
                     if f is eol:
                         return
                     pkt = await f
-                    sendPacket(ident, outlet, pkt)
+                    await sendPacket(ident, outlet, pkt)
                     break
 
         finally:
