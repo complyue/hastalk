@@ -45,22 +45,24 @@ class Peer:
         if not self.eol.done():
             self.eol.set_result(None)
 
-    def armedChannel(self, chLctr: object) -> EventSink:
+    def armed_channel(self, chLctr: object) -> EventSink:
         return self.channels.get(chLctr, None)
 
-    def armChannel(self, chLctr: object, chSink: Optional[EventSink]) -> EventSink:
+    def arm_channel(
+        self, chLctr: object, chSink: Optional[EventSink] = None
+    ) -> EventSink:
         if chSink is None:
             chSink = EventSink()
         self.channels[chLctr] = chSink
         return chSink
 
-    async def postCommand(self, src: str, dir_: str = ""):
+    async def post_command(self, src: str, dir_: str = ""):
         await self.posting(textPacket(dir_, src))
 
     async def p2c(self, dir_: str, src: str):
         await self.posting(textPacket(dir_, src))
 
-    async def readCommand(self, cmdEnv=None) -> Optional[object]:
+    async def read_command(self, cmdEnv=None) -> Optional[object]:
         """
         Read next command from peer
 
