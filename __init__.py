@@ -10,6 +10,7 @@ __all__ = [
 
     # exports from .edh
     'Maybe', 'Nothing', 'Just', 'EndOfStream', 'EdhPeerError', 'read_stream', 'PubChan', 'SubChan', 'EventSink',
+    'expr',
 
     # exports from .log
     'root_logger', 'get_logger',

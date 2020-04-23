@@ -5,6 +5,7 @@ A par layer to Edh in Haskell
 from .adt import *
 from .ctrl import *
 from .evt import *
+from .expr import *
 
 __all__ = [
 
@@ -16,5 +17,8 @@ __all__ = [
 
     # exports from .evt
     'PubChan', 'SubChan', 'EventSink',
+
+    # exports from .expr
+    'expr',
 
 ]
