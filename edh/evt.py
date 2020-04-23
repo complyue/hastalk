@@ -64,7 +64,7 @@ class PubChan:
         """
         nxt = self.nxt
         while True:
-            (itm, nxt) = await nxt
+            (itm, nxt) = await asyncio.shield(nxt)
             if itm is EndOfStream:
                 break
             yield itm
@@ -91,7 +91,7 @@ class SubChan:
         self.nxt = pubChan.nxt
 
     async def read(self):
-        (itm, self.nxt) = await self.nxt
+        (itm, self.nxt) = await asyncio.shield(self.nxt)
         return itm
 
 
@@ -130,6 +130,8 @@ class EventSink:
         """
         nxt = self.chan.nxt
         if self.seqn > 0:
+            if self.mrv is EndOfStream:
+                return
             yield self.mrv
         subw = self.subw
         if len(subw) > 0:
@@ -137,7 +139,7 @@ class EventSink:
             for producer in subw:
                 asyncio.create_task(producer)
         while True:
-            (itm, nxt) = await nxt
+            (itm, nxt) = await asyncio.shield(nxt)
             if itm is EndOfStream:
                 break
             yield itm

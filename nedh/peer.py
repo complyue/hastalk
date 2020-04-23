@@ -23,15 +23,15 @@ class Peer:
     def __init__(
         self,
         ident,
+        eol: asyncio.Future,
         posting: Callable[[Packet], Awaitable],
         hosting: Callable[[], Awaitable[Packet]],
         channels: Dict[Any, EventSink] = None,
     ):
-        loop = asyncio.get_running_loop()
         # identity of peer
         self.ident = ident
         # end-of-life state
-        self.eol = loop.create_future()
+        self.eol = eol
         # cmd outlet
         self.posting = posting
         # cmd intake

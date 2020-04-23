@@ -1,9 +1,13 @@
 import asyncio
 from typing import *
 
+from ..log import *
+
 from .adt import *
 
 __all__ = ["EndOfStream", "EdhPeerError", "read_stream"]
+
+logger = get_logger(__name__)
 
 
 class _EndOfStream:
@@ -34,14 +38,29 @@ class EdhPeerError(RuntimeError):
 
 
 async def read_stream(eos: asyncio.Future, rdr: Coroutine) -> Union[_EndOfStream, Any]:
-    done, _pending = await asyncio.wait(
-        {eos, asyncio.create_task(rdr)}, return_when=asyncio.FIRST_COMPLETED
-    )
-    if len(done) <= 1 and eos in done:
-        # done without unprocessed item
-        await eos  # reraise exception if that caused eos
-        return EndOfStream
-    for fut in done:
-        if fut is not eos:
-            return await fut
-    assert False, 'impossible to reach here'
+    try:
+        done, _pending = await asyncio.wait(
+            {eos, asyncio.create_task(rdr)}, return_when=asyncio.FIRST_COMPLETED
+        )
+        if len(done) <= 1 and eos in done:
+            # done without unprocessed item
+            await eos  # reraise exception if that caused eos
+            return EndOfStream
+        for fut in done:
+            if fut is not eos:
+                if fut.cancelled():
+                    if eos.done():
+                        return EndOfStream
+                return await fut
+    except asyncio.CancelledError:
+        if eos.done():
+            await eos  # reraise exception if that caused eos
+            return EndOfStream
+        logger.debug(
+            f"stream reading cancelled before eos: {eos!s}",
+            exc_info=True,
+            stack_info=True,
+        )
+        raise  # reraise as is, if not at eos yet
+
+    assert False, "impossible to reach here"

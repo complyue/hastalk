@@ -94,7 +94,7 @@ class EdhClient:
             # bounded queue
             hoq = asyncio.Queue(maxsize=1)
 
-            peer = Peer(ident=ident, posting=poq.put, hosting=hoq.get, channels={},)
+            peer = Peer(ident=ident, eol=eol, posting=poq.put, hosting=hoq.get,)
 
             # per-connection peer module preparation
             # code in this specified module should have:
@@ -119,6 +119,7 @@ class EdhClient:
                 try:
                     result = await __edh_consumer__()
                 except Exception as exc:
+                    logger.error("Nedh peer module caused some trouble.", exc_info=True)
                     if not eol.done():
                         eol.set_exception(exc)
                 finally:
