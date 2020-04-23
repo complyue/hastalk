@@ -5,7 +5,7 @@ from ..log import *
 
 from .adt import *
 
-__all__ = ["EndOfStream", "EdhPeerError", "read_stream"]
+__all__ = ["EndOfStream", "nil", "EdhPeerError", "read_stream"]
 
 logger = get_logger(__name__)
 
@@ -21,6 +21,9 @@ class _EndOfStream:
 # Edh uses nil to mark end-of-stream, it's improper in Python to use
 # None for that purpose, so here we use an explicit singleton object
 EndOfStream = _EndOfStream()
+
+# nil in Edh means this, eval nil to EndOfStream in Python for interop
+nil = EndOfStream
 
 
 class EdhPeerError(RuntimeError):
