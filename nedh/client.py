@@ -85,7 +85,12 @@ class EdhClient:
 
             # prepare the peer object
             ident = str(addr)
+            # outletting currently has no rate limit, maybe add in the future?
+            # with an unbounded queue, backpressure from remote peer is ignored
+            # and outgoing packets can pile up locally
             poq = asyncio.Queue()
+            # intaking should create backpressure when handled slowly, so use a
+            # bounded queue
             hoq = asyncio.Queue(maxsize=1)
 
             peer = Peer(ident=ident, posting=poq.put, hosting=hoq.get, channels={},)

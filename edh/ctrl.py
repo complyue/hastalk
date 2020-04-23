@@ -37,9 +37,10 @@ async def read_stream(eos: asyncio.Future, rdr: Coroutine) -> Union[_EndOfStream
     done, _pending = await asyncio.wait(
         {eos, asyncio.create_task(rdr)}, return_when=asyncio.FIRST_COMPLETED
     )
-    done.remove(eos)
-    if not done:
+    if len(done) <= 1 and eos in done:
+        # done without unprocessed item
         await eos  # reraise exception if that caused eos
         return EndOfStream
     for fut in done:
-        return await fut
+        if fut is not eos:
+            return await fut
