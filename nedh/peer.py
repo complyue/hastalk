@@ -7,12 +7,16 @@ import asyncio
 
 from typing import *
 
+import ast
+
 from ..edh import *
+from ..log import *
 
 from .mproto import *
 
-
 __all__ = ["Peer"]
+
+logger = get_logger(__name__)
 
 
 class Peer:
@@ -57,9 +61,15 @@ class Peer:
         return chSink
 
     async def post_command(self, src: str, dir_: str = ""):
+        if self.eol.done():
+            await self.eol  # reraise the exception caused eol if any
+            raise RuntimeError("peer end-of-life")
         await self.posting(textPacket(dir_, src))
 
     async def p2c(self, dir_: str, src: str):
+        if self.eol.done():
+            await self.eol  # reraise the exception caused eol if any
+            raise RuntimeError("peer end-of-life")
         await self.posting(textPacket(dir_, src))
 
     async def read_command(self, cmdEnv=None) -> Optional[object]:
@@ -102,7 +112,7 @@ class Peer:
             chSink = self.channels.get(chLctr, None)
             if chSink is None:
                 raise RuntimeError(f"Missing command channel: {chLctr!r}")
-            chSink.publish(cmdVal)
+            await chSink.publish(cmdVal)
             return None
         except Exception as exc:
             if not eol.done():

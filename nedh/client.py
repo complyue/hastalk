@@ -76,6 +76,7 @@ class EdhClient:
         outlet = None
         eol = self.eol
         try:
+
             # make the network connection
             intake, outlet = await asyncio.open_connection(
                 self.service_addr, self.service_port, **self.net_opts,
@@ -113,20 +114,19 @@ class EdhClient:
             logger.debug(f"Nedh peer module {self.consumer_modu} initialized")
 
             # mark client end-of-life with the result anyway
-            def cnsmr_cleanup(cnsmr_fut):
-                if eol.done():
-                    return
-                if cnsmr_fut.cancelled():
-                    eol.set_exception(asyncio.CancelledError())
-                    return
-                exc = cnsmr_fut.exception()
-                if exc is not None:
-                    eol.set_exception(exc)
-                else:
-                    eol.set_result(None)
+            async def run_consumer():
+                result = None
+                try:
+                    result = await __edh_consumer__()
+                except Exception as exc:
+                    if not eol.done():
+                        eol.set_exception(exc)
+                finally:
+                    if not eol.done():
+                        eol.set_result(result)
 
             # run the consumer module as another task (thread)
-            asyncio.create_task(__edh_consumer__()).add_done_callback(cnsmr_cleanup)
+            asyncio.create_task(run_consumer())
 
             # pump commands in,
             # this task is the only one reading the socket
@@ -141,13 +141,18 @@ class EdhClient:
             while True:
                 pkt = await read_stream(eol, poq.get())
                 if pkt is EndOfStream:
-                    return
+                    break
                 await sendPacket(ident, outlet, pkt)
 
+        except Exception as exc:
+            logger.error("Nedh client error.", exc_info=True)
+            if not eol.done():
+                eol.set_exception(exc)
         finally:
             if not self.service_addrs.done():
                 # fill empty addrs if the connection has ever failed
                 self.service_addrs.set_result([])
             if outlet is not None:
+                # todo post err to peer
                 outlet.close()
                 await outlet.wait_closed()

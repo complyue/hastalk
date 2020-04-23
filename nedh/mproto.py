@@ -2,16 +2,16 @@
 Micro Protocol that Nedh speaks
 
 """
-
-
 import asyncio
 
 from typing import *
 
 from ..edh import *
-
+from ..log import *
 
 __all__ = ["Packet", "textPacket", "sendPacket", "receivePacketStream"]
+
+logger = get_logger(__name__)
 
 
 MAX_HEADER_LENGTH = 60
@@ -31,7 +31,7 @@ def textPacket(dir_: str, txt: str):
         txt = "\n" + txt
     if not txt.endswith("\n"):
         txt = txt + "\n"
-    Packet(dir_, txt.encode("utf-8"))
+    return Packet(dir_, txt.encode("utf-8"))
 
 
 async def sendPacket(
@@ -75,7 +75,8 @@ async def receivePacketStream(
                     return EndOfStream  # reached end-of-stream
                 if not readahead:
                     return EndOfStream  # reached end-of-stream
-            if b"[" != readahead[0]:
+            if b"["[0] != readahead[0]:
+                logger.error(f"readahead: {readahead!r}")
                 raise EdhPeerError(peer_site, "missing packet header")
             hdr_end_pos = readahead.find(b"]")
             if hdr_end_pos < 0:
@@ -91,25 +92,29 @@ async def receivePacketStream(
             payload_len = int(plls)
             return payload_len, dir_
 
-    while True:
-        hdr = await parse_hdr()
-        if hdr is EndOfStream:  # normal eos, try mark and done
-            if not eos.done():
-                eos.set_result(EndOfStream)
-            break
+    try:
+        while True:
+            hdr = await parse_hdr()
+            if hdr is EndOfStream:  # normal eos, try mark and done
+                if not eos.done():
+                    eos.set_result(EndOfStream)
+                break
 
-        payload_len, dir_ = hdr
-        more2read = payload_len - len(readahead)
-        if more2read == 0:
-            payload = readahead
-            readahead = b""
-        elif more2read > 0:
-            more_payload = await read_stream(eos, intake.readexactly(more2read))
-            if more_payload is EndOfStream:
-                raise RuntimeError("premature end of packet stream")
-            payload = readahead + more_payload
-            readahead = b""
-        else:  # readahead contains more than this packet
-            payload = readahead[:more2read]
-            readahead = readahead[more2read:]
-        await pkt_sink(Packet(dir_, payload))
+            payload_len, dir_ = hdr
+            more2read = payload_len - len(readahead)
+            if more2read == 0:
+                payload = readahead
+                readahead = b""
+            elif more2read > 0:
+                more_payload = await read_stream(eos, intake.readexactly(more2read))
+                if more_payload is EndOfStream:
+                    raise RuntimeError("premature end of packet stream")
+                payload = readahead + more_payload
+                readahead = b""
+            else:  # readahead contains more than this packet
+                payload = readahead[:more2read]
+                readahead = readahead[more2read:]
+            await pkt_sink(Packet(dir_, payload))
+    except Exception as exc:
+        if not eos.done():
+            eos.set_exception(exc)

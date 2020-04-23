@@ -44,3 +44,4 @@ async def read_stream(eos: asyncio.Future, rdr: Coroutine) -> Union[_EndOfStream
     for fut in done:
         if fut is not eos:
             return await fut
+    assert False, 'impossible to reach here'
