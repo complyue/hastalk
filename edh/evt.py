@@ -144,7 +144,7 @@ class EventSink:
                 break
             yield itm
 
-    def runProducer(self, producer: Coroutine):
+    def run_producer(self, producer: Coroutine):
         """
         This is the producer scheduler that should be used to schedule a
         coroutine to run, which is going to publish events into this sink,

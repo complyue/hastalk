@@ -7,6 +7,7 @@ import asyncio
 
 from typing import *
 
+import inspect
 import ast
 
 from ..edh import *
@@ -49,16 +50,16 @@ class Peer:
         if not self.eol.done():
             self.eol.set_result(None)
 
-    def armed_channel(self, chLctr: object) -> EventSink:
-        return self.channels.get(chLctr, None)
+    def armed_channel(self, ch_lctr: object) -> EventSink:
+        return self.channels.get(ch_lctr, None)
 
     def arm_channel(
-        self, chLctr: object, chSink: Optional[EventSink] = None
+        self, ch_lctr: object, ch_sink: Optional[EventSink] = None
     ) -> EventSink:
-        if chSink is None:
-            chSink = EventSink()
-        self.channels[chLctr] = chSink
-        return chSink
+        if ch_sink is None:
+            ch_sink = EventSink()
+        self.channels[ch_lctr] = ch_sink
+        return ch_sink
 
     async def post_command(self, src: str, dir_: str = ""):
         if self.eol.done():
@@ -72,7 +73,9 @@ class Peer:
             raise RuntimeError("peer end-of-life")
         await self.posting(textPacket(dir_, src))
 
-    async def read_command(self, cmdEnv=None) -> Optional[object]:
+    async def read_command(
+        self, cmd_globals: Optional[dict] = None, cmd_locals: Optional[dict] = None,
+    ) -> Optional[object]:
         """
         Read next command from peer
 
@@ -89,30 +92,32 @@ class Peer:
             if not eol.done():
                 eol.set_exception(exc)
             raise exc
-        if cmdEnv is None:
-            # TODO way to obtain caller's global scope and default to that ?
-            pass
+        if cmd_globals is None:
+            assert cmd_locals is None, "given locals but not globals ?!"
+            caller_frame = inspect.currentframe().f_back
+            cmd_globals = caller_frame.f_globals
+            cmd_locals = caller_frame.f_locals
         if pkt.dir.startswith("blob:"):
             blob_dir = pkt.dir[5:]
             if len(blob_dir) < 1:
                 return pkt.payload
-            chLctr = run_py(blob_dir, cmdEnv, self.ident)
-            chSink = self.channels.get(chLctr, None)
-            if chSink is None:
-                raise RuntimeError(f"Missing command channel: {chLctr!r}")
-            chSink.publish(pkt.payload)
+            ch_lctr = run_py(blob_dir, self.ident, cmd_globals, cmd_locals)
+            ch_sink = self.channels.get(ch_lctr, None)
+            if ch_sink is None:
+                raise RuntimeError(f"Missing command channel: {ch_lctr!r}")
+            ch_sink.publish(pkt.payload)
             return None
         # interpret as textual command
         src = pkt.payload.decode("utf-8")
         try:
-            cmdVal = run_py(src, cmdEnv, self.ident)
+            cmd_val = run_py(src, self.ident, cmd_globals, cmd_locals)
             if len(pkt.dir) < 1:
-                return cmdVal
-            chLctr = run_py(pkt.dir, cmdEnv, self.ident)
-            chSink = self.channels.get(chLctr, None)
-            if chSink is None:
-                raise RuntimeError(f"Missing command channel: {chLctr!r}")
-            await chSink.publish(cmdVal)
+                return cmd_val
+            ch_lctr = run_py(pkt.dir, self.ident, cmd_globals, cmd_locals)
+            ch_sink = self.channels.get(ch_lctr, None)
+            if ch_sink is None:
+                raise RuntimeError(f"Missing command channel: {ch_lctr!r}")
+            await ch_sink.publish(cmd_val)
             return None
         except Exception as exc:
             if not eol.done():
@@ -120,13 +125,20 @@ class Peer:
             raise  # reraise as is
 
 
-def run_py(code: str, globals_: dict = None, src_name="<py-code>") -> object:
+def run_py(
+    code: str,
+    src_name: str = "<py-code>",
+    globals_: Optional[dict] = None,
+    locals_: Optional[dict] = None,
+) -> object:
     """
     Run arbitrary Python code in supplied globals, return evaluated value of last statement.
 
     """
     if globals_ is None:
         globals_ = {}
+    if locals_ is None:
+        locals_ = globals_
     try:
         ast_ = ast.parse(code, src_name, "exec")
         last_expr = None
@@ -141,11 +153,12 @@ def run_py(code: str, globals_: dict = None, src_name="<py-code>") -> object:
                     last_expr.body = field_[1].pop().value
                 elif isinstance(le, (ast.FunctionDef, ast.ClassDef)):
                     last_def_name = le.name
-        exec(compile(ast_, src_name, "exec"), globals_)
+        exec(compile(ast_, src_name, "exec"), globals_, locals_)
         if last_expr is not None:
-            return eval(compile(last_expr, src_name, "eval"), globals_)
+            return eval(compile(last_expr, src_name, "eval"), globals_, locals_)
         elif last_def_name is not None:
-            return globals_[last_def_name]
+            # godforbid the code to declare global/nonlocal for the last defined artifact
+            return locals_[last_def_name]
         return None
     except Exception:
         logger.error(
