@@ -8,13 +8,13 @@ import asyncio
 
 from typing import *
 
-import regex
+import re
 import inspect
 
 __all__ = ["expr"]
 
 
-SPLITER = regex.compile(r"\{\$(.*?)\$\}", regex.S)
+SPLITER = re.compile(r"\{\$(.*?)\$\}", re.S)
 
 
 def expr(isrc: str) -> str:
