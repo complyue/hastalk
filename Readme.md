@@ -1,4 +1,4 @@
-# HasTalk
+# HasTalk - IPC between Python and Haskell
 
 **HasTalk** is about **IPC** (Inter-Process Communication) with
 **Haskell** programs speaking [Nedh](https://github.com/e-wrks/nedh)
