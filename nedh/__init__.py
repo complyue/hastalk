@@ -12,7 +12,7 @@ __all__ = [
     'Packet', 'textPacket', 'sendPacket', 'receivePacketStream',
 
     # exports from .options
-    'CONIN', 'CONOUT', 'CONMSG',
+    'CONIN', 'CONOUT', 'CONMSG', 'ERR_CHAN', 'DATA_CHAN',
 
     # exports from .peer
     'Peer',

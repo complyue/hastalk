@@ -40,6 +40,17 @@ class Peer:
         # cmd mux
         self.channels = channels or {}
 
+        async def peer_cleanup():
+            try:
+                await self.eol
+            except:
+                pass
+
+            for ch in self.channels.values():
+                await ch.publish(EndOfStream)
+
+        asyncio.create_task(peer_cleanup())
+
     def __repr__(self):
         return f"Peer<{self.ident}>"
 
@@ -87,11 +98,6 @@ class Peer:
         if pkt is EndOfStream:
             return EndOfStream
         assert isinstance(pkt, Packet), f"Unexpected packet of type: {type(pkt)!r}"
-        if "err" == pkt.dir:
-            exc = RuntimeError(pkt.payload.decode("utf-8"))
-            if not eol.done():
-                eol.set_exception(exc)
-            raise exc
         if cmd_globals is None:
             assert cmd_locals is None, "given locals but not globals ?!"
             caller_frame = inspect.currentframe().f_back

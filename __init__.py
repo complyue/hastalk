@@ -16,6 +16,7 @@ __all__ = [
     'root_logger', 'get_logger',
 
     # exports from .nedh
-    'EdhClient', 'Packet', 'textPacket', 'sendPacket', 'receivePacketStream', 'CONIN', 'CONOUT', 'CONMSG', 'Peer',
+    'EdhClient', 'Packet', 'textPacket', 'sendPacket', 'receivePacketStream', 'CONIN', 'CONOUT', 'CONMSG', 'ERR_CHAN',
+    'DATA_CHAN', 'Peer',
 
 ]
