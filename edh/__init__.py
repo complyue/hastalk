@@ -17,7 +17,7 @@ __all__ = [
     'EndOfStream', 'nil', 'EdhPeerError', 'read_stream',
 
     # exports from .eff
-    'effect',
+    'Symbol', 'effect',
 
     # exports from .evt
     'PubChan', 'SubChan', 'EventSink',
