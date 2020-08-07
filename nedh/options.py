@@ -1,6 +1,5 @@
 """
 """
-
 __all__ = [
     "CONIN",
     "CONOUT",

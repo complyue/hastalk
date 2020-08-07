@@ -2,10 +2,9 @@
 Some ADTs on par with Haskell idioms
 
 """
+__all__ = ["Maybe", "Nothing", "Just"]
 
 from typing import *
-
-__all__ = ["Maybe", "Nothing", "Just"]
 
 
 class _Nothing:

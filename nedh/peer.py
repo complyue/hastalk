@@ -2,6 +2,7 @@
 Nedh Peer Interface
 
 """
+__all__ = ["Peer"]
 
 import asyncio
 
@@ -14,8 +15,6 @@ from ..edh import *
 from ..log import *
 
 from .mproto import *
-
-__all__ = ["Peer"]
 
 logger = get_logger(__name__)
 

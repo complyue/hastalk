@@ -2,12 +2,12 @@
 Environment variable controlled logger tree from root package.
 
 """
+__all__ = ["root_logger", "get_logger"]
 
 import logging
 import os
 import sys
 
-__all__ = ["root_logger", "get_logger"]
 
 ROOT_NAME = __package__.split(".", 1)[0]
 

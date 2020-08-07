@@ -24,6 +24,7 @@ faster producer will constantly increase the program's memory footprint, i.e.
 items will pile up in memory.
 
 """
+__all__ = ["PubChan", "SubChan", "EventSink"]
 
 import asyncio
 
@@ -31,9 +32,6 @@ from typing import *
 
 from .ctrl import *
 from .adt import *
-
-
-__all__ = ["PubChan", "SubChan", "EventSink"]
 
 
 class PubChan:

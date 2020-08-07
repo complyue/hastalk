@@ -1,11 +1,10 @@
+__all__ = ["EndOfStream", "nil", "EdhPeerError", "read_stream"]
 import asyncio
 from typing import *
 
 from ..log import *
 
 from .adt import *
-
-__all__ = ["EndOfStream", "nil", "EdhPeerError", "read_stream"]
 
 logger = get_logger(__name__)
 

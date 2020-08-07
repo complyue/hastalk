@@ -4,14 +4,13 @@ An expr() function at par to expr construct in Edh
 Unlike in Edh, expr values in Python stay of string type
 
 """
+__all__ = ["expr"]
 import asyncio
 
 from typing import *
 
 import re
 import inspect
-
-__all__ = ["expr"]
 
 
 SPLITER = re.compile(r"\{\$(.*?)\$\}", re.S)

@@ -2,6 +2,7 @@
 Edh Client speaking Nedh
 
 """
+__all__ = ["EdhClient"]
 
 import runpy
 
@@ -14,8 +15,6 @@ from ..log import *
 
 from .mproto import *
 from .peer import *
-
-__all__ = ["EdhClient"]
 
 logger = get_logger(__name__)
 

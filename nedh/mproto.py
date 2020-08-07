@@ -2,14 +2,13 @@
 Micro Protocol that Nedh speaks
 
 """
+__all__ = ["Packet", "textPacket", "sendPacket", "receivePacketStream"]
 import asyncio
 
 from typing import *
 
 from ..edh import *
 from ..log import *
-
-__all__ = ["Packet", "textPacket", "sendPacket", "receivePacketStream"]
 
 logger = get_logger(__name__)
 
