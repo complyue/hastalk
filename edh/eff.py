@@ -3,6 +3,10 @@ from typing import *
 import asyncio
 import inspect
 
+from ..log import *
+
+logger = get_logger(__name__)
+
 
 class Symbol:
     __slots__ = ("repr",)
@@ -86,10 +90,12 @@ def effect(key2get_or_dict2put: Optional[Union[dict, object]] = None, **kws2put)
         if key2get is None:
             return None
 
-        for frame in reverse(async_stack):
+        for frame in reversed(async_stack):
             scope = frame.f_locals
-            art = scope.get(key2get, scope)
-            if art is not scope:
-                return art
+            effs = scope.get(EFFSKEY, None)
+            if effs is not None:
+                art = effs.get(key2get, effs)
+                if art is not effs:
+                    return art
 
-        raise ValueError(f"No such effect: {key2get!r}")
+        raise ValueError(f"No such async effect: {key2get!r}")
