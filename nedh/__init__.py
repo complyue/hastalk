@@ -1,7 +1,3 @@
-from .client import *
-from .mproto import *
-from .options import *
-from .peer import *
 
 __all__ = [
 
@@ -18,3 +14,8 @@ __all__ = [
     'Peer',
 
 ]
+
+from .client import *
+from .mproto import *
+from .options import *
+from .peer import *

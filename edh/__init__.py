@@ -2,11 +2,6 @@
 A par layer to Edh in Haskell
 
 """
-from .adt import *
-from .ctrl import *
-from .eff import *
-from .evt import *
-from .expr import *
 
 __all__ = [
 
@@ -26,3 +21,9 @@ __all__ = [
     'expr',
 
 ]
+
+from .adt import *
+from .ctrl import *
+from .eff import *
+from .evt import *
+from .expr import *

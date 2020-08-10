@@ -173,7 +173,7 @@ def flat_defs(sub_data):
         assert False, "unexpected type %r" % (type(sub_exps))
 
 
-def wrapping_lines(frags, indent="", sep="", columns=119):
+def wrapping_lines(frags, indent="", sep="", columns=79):
     line = ""
     for frag in frags:
         if len(line) <= 0:
@@ -193,24 +193,25 @@ def gen_init(f, prelude, sn2exps):
     if prelude is not None:
         f.write(prelude)
 
+    if not wild_exports:
+
+        f.write("\n__all__ = [\n")
+
+        for sn, exps in non_empty_exps:
+            f.write("\n    # exports from .%s\n" % (sn,))
+            f.writelines(
+                wrapping_lines(
+                    ("'%s'," % (expn,) for expn in exps), indent="    ", sep=" "
+                )
+            )
+
+        for sn, (bubble_up, sub_exps) in sorted(sn2exps.items()):
+            if isinstance(sub_exps, BaseException):
+                f.write("\n    # .%s has error: {%s}\n" % (sn, sub_exps))
+
+        f.write("\n]\n\n")
+
     f.writelines("from .%s import *\n" % (sn,) for sn, exps in non_empty_exps)
-
-    if wild_exports:
-        return
-
-    f.write("\n__all__ = [\n")
-
-    for sn, exps in non_empty_exps:
-        f.write("\n    # exports from .%s\n" % (sn,))
-        f.writelines(
-            wrapping_lines(("'%s'," % (expn,) for expn in exps), indent="    ", sep=" ")
-        )
-
-    for sn, (bubble_up, sub_exps) in sorted(sn2exps.items()):
-        if isinstance(sub_exps, BaseException):
-            f.write("\n    # .%s has error: {%s}\n" % (sn, sub_exps))
-
-    f.write("\n]\n")
 
 
 def write_out(root_dir, pkg_path, sn2exps, dry_run=True):
