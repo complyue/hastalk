@@ -1,8 +1,9 @@
 """
-Python Client speaking Nedh
+Python Server speaking Nedh
 
 """
-__all__ = ["EdhClient"]
+__all__ = ["EdhServer"]
+
 
 from typing import *
 import asyncio
@@ -19,55 +20,61 @@ from .peer import *
 logger = get_logger(__name__)
 
 
-class EdhClient:
+class EdhServer:
     """
     """
 
     def __init__(
         self,
-        consumer_modu: str,
-        service_addr: str = "127.0.0.1",
-        service_port: int = 3721,
-        init: Optional[Callable[[dict], Awaitable]] = None,
+        service_modu: str,
+        server_addr: str = "127.0.0.1",
+        server_port: int = 3721,
+        server_port_max: Optional[int] = None,
+        init: Optional[Callable] = None,
+        clients: Optional[EventSink] = None,
         net_opts: Optional[Dict] = None,
     ):
         loop = asyncio.get_running_loop()
         eol = loop.create_future()
-        self.consumer_modu = consumer_modu
-        self.service_addr = service_addr
-        self.service_port = service_port
+        self.service_modu = service_modu
+        self.server_addr = server_addr
+        self.server_port = server_port
+        self.server_port_max = server_port_max
         self.init = init
+        self.clients = clients or EventSink()
 
-        self.service_addrs = loop.create_future()
+        self.server_sockets = loop.create_future()
         self.eol = eol
         self.net_opts = net_opts or {}
 
-        # mark end-of-life anyway finally
-        def client_cleanup(clnt_fut):
-            if not self.service_addrs.done():
+        # mark end-of-stream for clients, end-of-life for server, finally
+        def server_cleanup(svr_fut):
+            self.clients.publish(EndOfStream)
+
+            if not self.server_sockets.done():
                 # fill empty addrs if the connection has ever failed
-                self.service_addrs.set_result([])
+                self.server_sockets.set_result([])
 
             if eol.done():
                 return
 
-            if clnt_fut.cancelled():
+            if svr_fut.cancelled():
                 eol.set_exception(asyncio.CancelledError())
                 return
-            exc = clnt_fut.exception()
+            exc = svr_fut.exception()
             if exc is not None:
                 eol.set_exception(exc)
             else:
                 eol.set_result(None)
 
-        asyncio.create_task(self._consumer_thread()).add_done_callback(client_cleanup)
+        asyncio.create_task(self._server_thread()).add_done_callback(server_cleanup)
 
     def __repr__(self):
-        return f"EdhClient({self.consumer_modu!r}, {self.service_addr!r}, {self.service_port!r})"
+        return f"EdhServer({self.service_modu!r}, {self.server_addr!r}, {self.server_port!r})"
 
     def __await__(self):
-        yield from self.service_addrs
-        logger.info(f"Connected to service at {self.service_addrs.result()!s}")
+        yield from self.server_sockets
+        # server_addrs = [sock.getsockname() for sock in self.server_sockets.result()]
         return self
 
     async def join(self):
@@ -77,17 +84,44 @@ class EdhClient:
         if not self.eol.done():
             self.eol.set_result(None)
 
-    async def _consumer_thread(self):
-        outlet = None
-        eol = self.eol
-        try:
+    async def _server_thread(self):
+        port = self.server_port
+        while True:
 
-            # make the network connection
-            intake, outlet = await asyncio.open_connection(
-                self.service_addr, self.service_port, **self.net_opts,
-            )
+            async with await asyncio.start_server(
+                self._serv_client,
+                self.server_addr,
+                port,
+                reuse_address=False,
+                start_serving=False,
+                **self.net_opts,
+            ) as server:
+
+                try:
+                    await server.start_serving()
+                except:
+                    if port is 0 or self.server_port_max is None:
+                        raise
+                    port = port + 1
+                    if port > self.server_port_max:
+                        raise
+                    continue  # try next port
+
+                self.server_sockets.set_result(server.sockets)
+
+                try:
+                    await self.eol
+                except:
+                    pass
+                return
+
+    async def _serv_client(
+        self, intake: asyncio.StreamReader, outlet: asyncio.StreamWriter,
+    ):
+        loop = asyncio.get_running_loop()
+        eol = loop.create_future()
+        try:
             addr = outlet.get_extra_info("peername", "<some-peer>")
-            self.service_addrs.set_result([addr])
 
             # prepare the peer object
             ident = str(addr)
@@ -111,9 +145,11 @@ class EdhClient:
             # launch the peer module, it normally forks a concurrent task to
             # run a command landing loop
             runpy.run_module(
-                self.consumer_modu, modu,
+                self.service_modu, modu,
             )
-            logger.debug(f"Nedh peer module {self.consumer_modu} initialized")
+            logger.debug(f"Nedh client peer module {self.service_modu} initialized")
+
+            self.clients.publish(peer)
 
             # pump commands in,
             # this task is the only one reading the socket
@@ -131,12 +167,18 @@ class EdhClient:
                     break
                 await sendPacket(ident, outlet, pkt)
 
+        except asyncio.CancelledError:
+            pass
+
         except Exception as exc:
-            logger.error("Nedh client error.", exc_info=True)
+            logger.error("Nedh client caused error.", exc_info=True)
             if not eol.done():
                 eol.set_exception(exc)
+
         finally:
-            if outlet is not None:
-                # todo post err (if any) to peer
-                outlet.close()
-                await outlet.wait_closed()
+            if not eol.done():
+                eol.set_result(None)
+            # todo post err (if any) to peer
+            outlet.close()
+            await outlet.wait_closed()
+

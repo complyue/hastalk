@@ -4,9 +4,8 @@ Nedh Peer Interface
 """
 __all__ = ["Peer"]
 
-import asyncio
-
 from typing import *
+import asyncio
 
 import inspect
 import ast
@@ -46,7 +45,7 @@ class Peer:
                 pass
 
             for ch in self.channels.values():
-                await ch.publish(EndOfStream)
+                ch.publish(EndOfStream)
 
         asyncio.create_task(peer_cleanup())
 
@@ -63,6 +62,13 @@ class Peer:
     def armed_channel(self, ch_lctr: object) -> EventSink:
         return self.channels.get(ch_lctr, None)
 
+    def ensure_channel(self, ch_lctr: object) -> EventSink:
+        ch_sink = self.channels.get(ch_lctr, None)
+        if ch_sink is None:
+            ch_sink = EventSink()
+            self.channels[ch_lctr] = ch_sink
+        return ch_sink
+
     def arm_channel(
         self, ch_lctr: object, ch_sink: Optional[EventSink] = None
     ) -> EventSink:
@@ -71,17 +77,17 @@ class Peer:
         self.channels[ch_lctr] = ch_sink
         return ch_sink
 
-    async def post_command(self, src: str, dir_: str = ""):
+    async def post_command(self, src: str, dir_: object = ""):
         if self.eol.done():
             await self.eol  # reraise the exception caused eol if any
             raise RuntimeError("peer end-of-life")
-        await self.posting(textPacket(dir_, src))
+        await self.posting(textPacket(repr(dir_), str(src)))
 
-    async def p2c(self, dir_: str, src: str):
+    async def p2c(self, dir_: object, src: str):
         if self.eol.done():
             await self.eol  # reraise the exception caused eol if any
             raise RuntimeError("peer end-of-life")
-        await self.posting(textPacket(dir_, src))
+        await self.posting(textPacket(repr(dir_), str(src)))
 
     async def read_command(
         self, cmd_globals: Optional[dict] = None, cmd_locals: Optional[dict] = None,
@@ -106,7 +112,7 @@ class Peer:
             blob_dir = pkt.dir[5:]
             if len(blob_dir) < 1:
                 return pkt.payload
-            ch_lctr = run_py(blob_dir, self.ident, cmd_globals, cmd_locals)
+            ch_lctr = await run_py(blob_dir, self.ident, cmd_globals, cmd_locals)
             ch_sink = self.channels.get(ch_lctr, None)
             if ch_sink is None:
                 raise RuntimeError(f"Missing command channel: {ch_lctr!r}")
@@ -115,14 +121,14 @@ class Peer:
         # interpret as textual command
         src = pkt.payload.decode("utf-8")
         try:
-            cmd_val = run_py(src, self.ident, cmd_globals, cmd_locals)
+            cmd_val = await run_py(src, self.ident, cmd_globals, cmd_locals)
             if len(pkt.dir) < 1:
                 return cmd_val
-            ch_lctr = run_py(pkt.dir, self.ident, cmd_globals, cmd_locals)
+            ch_lctr = await run_py(pkt.dir, self.ident, cmd_globals, cmd_locals)
             ch_sink = self.channels.get(ch_lctr, None)
             if ch_sink is None:
                 raise RuntimeError(f"Missing command channel: {ch_lctr!r}")
-            await ch_sink.publish(cmd_val)
+            ch_sink.publish(cmd_val)
             return None
         except Exception as exc:
             if not eol.done():
@@ -130,7 +136,19 @@ class Peer:
             raise  # reraise as is
 
 
-def run_py(
+async def run_py(
+    code: str,
+    src_name: str = "<py-code>",
+    globals_: Optional[dict] = None,
+    locals_: Optional[dict] = None,
+) -> object:
+    maybe_aw = exec_py(code, src_name, globals_, locals_)
+    if inspect.isawaitable(maybe_aw):
+        return await maybe_aw
+    return maybe_aw
+
+
+def exec_py(
     code: str,
     src_name: str = "<py-code>",
     globals_: Optional[dict] = None,

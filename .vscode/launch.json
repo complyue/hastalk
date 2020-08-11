@@ -9,6 +9,15 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "hastalk.demo.batch01",
+            "type": "python",
+            "request": "launch",
+            "module": "hastalk.demo.batch01",
+            "env": {
+                "HASTALK_LOG_LEVEL": "DEBUG"
+            }
+        },
+        {
             "name": "Pretty Exports",
             "type": "python",
             "request": "launch",

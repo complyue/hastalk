@@ -99,7 +99,11 @@ class EventSink:
 
     """
 
-    __slots__ = ("seqn", "mrv", "chan", "subw")
+    __slots__ = (
+        "seqn",
+        "mrv",
+        "chan",
+    )
 
     def __init__(self):
         # sequence number
@@ -108,10 +112,8 @@ class EventSink:
         self.mrv = None
         # the publish channel
         self.chan = PubChan()
-        # subscriber waiters, must be coroutines
-        self.subw = []
 
-    async def publish(self, ev):
+    def publish(self, ev):
         if self.seqn >= 9223372036854775807:
             # int64 wrap back to 1 on overflow
             self.seqn = 1
@@ -119,6 +121,14 @@ class EventSink:
             self.seqn += 1
         self.mrv = ev
         self.chan.write(ev)
+
+    async def one_more(self):
+        nxt = self.chan.nxt
+        if self.seqn > 0:
+            if self.mrv is EndOfStream:
+                return EndOfStream  # already at eos
+        itm, nxt = await asyncio.shield(nxt)
+        return itm
 
     async def stream(self):
         """
@@ -131,18 +141,13 @@ class EventSink:
             if self.mrv is EndOfStream:
                 return
             yield self.mrv
-        subw = self.subw
-        if len(subw) > 0:
-            self.subw = []
-            for producer in subw:
-                asyncio.create_task(producer)
         while True:
             (itm, nxt) = await asyncio.shield(nxt)
             if itm is EndOfStream:
                 break
             yield itm
 
-    def run_producer(self, producer: Coroutine):
+    async def run_producer(self, producer: Coroutine):
         """
         This is the producer scheduler that should be used to schedule a
         coroutine to run, which is going to publish events into this sink,
@@ -150,4 +155,29 @@ class EventSink:
         this sink, i.e. to ensure no event from the producer coroutine can
         be missed by the consumer.
         """
-        self.subw.append(producer)
+        nxt = self.chan.nxt
+        prod_task = asyncio.create_task(producer)
+        while True:
+            nxt_task = asyncio.shield(nxt)
+            await asyncio.wait(
+                [nxt_task, prod_task], return_when=asyncio.FIRST_COMPLETED
+            )
+            if nxt_task.done():
+                (itm, nxt) = nxt_task.result()
+                if itm is EndOfStream:
+                    return
+                yield itm
+                if prod_task.done():
+                    # propagate any error ever occurred in the producer
+                    # todo should try consume more items already enqueued there?
+                    await prod_task
+            else:
+                assert prod_task.done(), "neither nxt_task nor prod_task completed?"
+                # propagate any error ever occurred in the producer
+                await prod_task
+                # consume the stream until eos
+                while True:
+                    (itm, nxt) = await nxt
+                    if itm is EndOfStream:
+                        return
+                    yield itm
