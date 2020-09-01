@@ -20,7 +20,8 @@ __all__ = [
     'sendData',
 
     # exports from .sedh
-    'HeadHunter', 'doOneJob', 'shouldRetryJob', 'manage_batch_jobs',
+    'HeadHunter', 'workDefinition', 'doOneJob', 'shouldRetryJob',
+    'manage_batch_jobs',
 
 ]
 

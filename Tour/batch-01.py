@@ -1,6 +1,6 @@
 """
 
-this is an entry moduel to hook up some worker nodes from the swarm,
+this is an entry script to hook up some worker nodes from the swarm,
 to accomplish the work defined in some module, with arbitrary overrides
 possible from this module
 
@@ -18,17 +18,20 @@ import asyncio
 
 from hastalk import *
 
-# work definition scripts are allowed to change the inferred
-# configuration at `hastalk.sedh.senv`, import it as a namespace to
-# always use up-to-date artifacts living there
+# work definition scripts are allowed to change the inferred configuration at
+# `hastalk.sedh.senv`, import the module as a reference, to get/set effective
+# artifacts living there
 import hastalk.sedh.senv as senv
 
-# import reusable work definition from some module
+# we use this work definition module
+# pull in support artifacts exported from the work definition module
+from hastalk.demo.batch import *
+
+# import the work definition module's effects into this work script is a
+# workaround for effectful artifacts defined there to actually work
 import hastalk.demo.batch
 
-# import the work module's effects as well
 effect_import(hastalk.demo.batch)
-
 
 logger = get_logger(__package__)
 
@@ -53,7 +56,7 @@ def m_range():
 
 
 asyncio.run(
-    hastalk.demo.batch.manage_this_work(
+    manage_this_work(
         # what's specified here will override artifacts those samely named in
         # the reused work definition module's scope, they serve as lexical
         # default values to `manage_this_work()` defined there

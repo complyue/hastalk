@@ -9,10 +9,10 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "hastalk.demo.batch01",
+            "name": "batch-01",
             "type": "python",
             "request": "launch",
-            "module": "hastalk.demo.batch01",
+            "program": "${workspaceFolder}/Tour/batch-01.py",
             "env": {
                 "HASTALK_LOG_LEVEL": "DEBUG"
             }

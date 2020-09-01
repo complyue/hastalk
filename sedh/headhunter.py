@@ -79,10 +79,10 @@ class HeadHunter:
         self.result_sink = result_sink
         self.server_modu = server_modu
 
+        # fetch effective configurations, cache as instance attribute
         self.priority = effect("priority")
         self.headcount = effect("headcount")
-
-        self.doOneJob = effect(doOneJob)
+        self.workModu = effect(workDefinition)
         self.shouldRetryJob = effect(shouldRetryJob)
 
         self.hc_employed = 0
@@ -217,7 +217,7 @@ WorkToDo(
     {hc_demand!r},
     {senv.jobExecutable!r},
     {senv.jobWorkDir!r},
-    {senv.jobWorkModu!r},
+    {self.workModu!r},
     {self.priority!r},
 )
 """.encode()
@@ -227,8 +227,6 @@ WorkToDo(
                 [asyncio.sleep(cfw_interval), self.result_sink.one_more()],
                 return_when=asyncio.FIRST_COMPLETED,
             )
-
-            logger.debug("xx")
 
     async def track_job(self, worker: Worker, ips: Dict):
         peer = worker.peer

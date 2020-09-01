@@ -5,7 +5,7 @@ __all__ = [
     'HeadHunter',
 
     # exports from .symbols
-    'doOneJob', 'shouldRetryJob',
+    'workDefinition', 'doOneJob', 'shouldRetryJob',
 
     # exports from .work
     'manage_batch_jobs',

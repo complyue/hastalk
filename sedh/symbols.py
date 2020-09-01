@@ -2,12 +2,16 @@
 """
 
 __all__ = [
+    "workDefinition",
     "doOneJob",
     "shouldRetryJob",
 ]
 
 from ..edh import *
 
+
+# effect identifier for name of work definition module
+workDefinition = Symbol("@workDefinition")
 
 # effect identifier for computation working out
 doOneJob = Symbol("@doOneJob")

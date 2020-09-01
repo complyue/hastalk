@@ -9,9 +9,9 @@ import time
 
 from hastalk import *
 
-# work definition scripts are allowed to change the inferred
-# configuration at `hastalk.sedh.senv`, import it as a namespace to
-# always use up-to-date artifacts living there
+# work definition scripts are allowed to change the inferred configuration at
+# `hastalk.sedh.senv`, import the module as a reference, to get/set effective
+# artifacts living there
 import hastalk.sedh.senv as senv
 
 from .etc import *
@@ -25,13 +25,13 @@ logger = get_logger(__name__)
 use_haskell_workers = True
 if use_haskell_workers:
 
-    # these overrides will invoke Haskell based work from a Python based HH
+    # to invoke following Haskell based work from a Python based HH
     senv.jobExecutable = [
         "epm",
         "exec",
         "gwd",
     ]
-    senv.jobWorkModu = "swarm/demo/batch"
+    workModu = "swarm/demo/batch"
 
     async def doOneJob_(**ips):
         raise RuntimeError("Not for a Python worker to do this!")
@@ -39,9 +39,8 @@ if use_haskell_workers:
 
 else:
 
-    # make sure the swarm work module is this module,
-    # regardless of whatever entry module used
-    senv.jobWorkModu = __name__
+    # the enclosing module here is the work definition module
+    workModu = __name__
 
     # this should noramlly imported from more general modules
     async def compute_it(z):
@@ -76,6 +75,11 @@ async def shouldRetryJob_(jobExc: object, ips: Dict):
 async def manage_this_work(**param_overrides):
     globals().update(param_overrides)
 
+    # seems that defining effects here doesn't work, may due to `create_task()`
+    # in the `run_producer()` implementation breaks the async call stack
+    # 
+    # while `effect_import()` this work definition module from the work script
+    # file is a workaround so far
     effect(__all_symbolic__)
 
     def iter_params():
@@ -96,6 +100,7 @@ async def manage_this_work(**param_overrides):
 
 
 __all_symbolic__ = {
+    workDefinition: workModu,
     doOneJob: doOneJob_,
     shouldRetryJob: shouldRetryJob_,
 }
