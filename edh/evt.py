@@ -62,15 +62,23 @@ class PubChan:
         """
         nxt = self.nxt
         while True:
-            (itm, nxt) = await asyncio.shield(nxt)
-            if itm is EndOfStream:
+            (ev, nxt) = await asyncio.shield(nxt)
+            if ev is EndOfStream:
                 break
-            yield itm
+            yield ev
+            ev = None
 
 
 class SubChan:
     """
     Subscriber's channel, read only.
+
+    CAVEAT:
+
+    As long as a SubChan is created and stay alive, all subsequent items
+    written to its upstream PubChan will be buffered for it, until consumed
+    with `subChan.read()`. Consuming a SubChan slower than items being produced
+    into its PubChan will increase memory footprint.
     
     """
 
@@ -79,18 +87,12 @@ class SubChan:
     def __init__(self, pubChan: "PubChan"):
         """
         Create a subscriber's channel from a publisher's channel
-
-        All subsequent items written to the PubChan will be buffered for this
-        SubChan until consumed with `subChan.read()`
-
-        CAVEAT: Consuming this SubChan slower than producing to the PubChan
-                will increase memory footprint.
         """
         self.nxt = pubChan.nxt
 
     async def read(self):
-        (itm, self.nxt) = await asyncio.shield(self.nxt)
-        return itm
+        (ev, self.nxt) = await asyncio.shield(self.nxt)
+        return ev
 
 
 class EventSink:
@@ -123,37 +125,36 @@ class EventSink:
         self.chan.write(ev)
 
     async def one_more(self):
+        if self.seqn > 0 and self.mrv is EndOfStream:
+            return EndOfStream  # already at eos
         nxt = self.chan.nxt
-        if self.seqn > 0:
-            if self.mrv is EndOfStream:
-                return EndOfStream  # already at eos
-        itm, nxt = await asyncio.shield(nxt)
-        return itm
+        ev, _nxt = await asyncio.shield(nxt)
+        return ev
 
     async def stream(self):
         """
-        This is the async iterator an event consumer should use to consume
+        This is the async iterable an event consumer should use to consume
         subsequent events from this sink.
 
         """
+        if self.seqn > 0 and self.mrv is EndOfStream:
+            return  # already at eos
+        yield self.mrv
         nxt = self.chan.nxt
-        if self.seqn > 0:
-            if self.mrv is EndOfStream:
-                return
-            yield self.mrv
         while True:
-            (itm, nxt) = await asyncio.shield(nxt)
-            if itm is EndOfStream:
+            (ev, nxt) = await asyncio.shield(nxt)
+            if ev is EndOfStream:
                 break
-            yield itm
+            yield ev
+            ev = None
 
     async def run_producer(self, producer: Coroutine):
         """
-        This is the producer scheduler that should be used to schedule a
+        This is the async iterable that should be used to schedule a producer
         coroutine to run, which is going to publish events into this sink,
-        but only after some consumer has started consuming events from
+        but only after the looping consumer has started consuming events from
         this sink, i.e. to ensure no event from the producer coroutine can
-        be missed by the consumer.
+        be missed by the calling consumer.
         """
         nxt = self.chan.nxt
         prod_task = asyncio.create_task(producer)
@@ -162,22 +163,21 @@ class EventSink:
             await asyncio.wait(
                 [nxt_task, prod_task], return_when=asyncio.FIRST_COMPLETED
             )
-            if nxt_task.done():
-                (itm, nxt) = nxt_task.result()
-                if itm is EndOfStream:
-                    return
-                yield itm
-                if prod_task.done():
-                    # propagate any error ever occurred in the producer
-                    # todo should try consume more items already enqueued there?
-                    await prod_task
-            else:
-                assert prod_task.done(), "neither nxt_task nor prod_task completed?"
+            if prod_task.done():
                 # propagate any error ever occurred in the producer
                 await prod_task
-                # consume the stream until eos
+                # continue consuming the stream until eos
                 while True:
-                    (itm, nxt) = await nxt
-                    if itm is EndOfStream:
+                    (ev, nxt) = await nxt_task
+                    if ev is EndOfStream:
                         return
-                    yield itm
+                    yield ev
+                    ev = None
+                    nxt_task = asyncio.shield(nxt)
+            elif nxt_task.done():
+                (ev, nxt) = nxt_task.result()
+                if ev is EndOfStream:
+                    return
+                yield ev
+                ev = None
+
