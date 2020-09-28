@@ -94,7 +94,9 @@ def gather_exports(root_dir, pkg_path, sn2exps, pkg_only=False):
             # ignore path contains chars other than alphabet, digits, dot, and underscore
             continue
 
-        if sub_name.endswith(".py"):
+        if sub_name.endswith(".py") and os.path.isfile(
+            os.path.join(parent_dir, sub_name)
+        ):
             # process sub-module
 
             if sub_name.startswith("_"):
